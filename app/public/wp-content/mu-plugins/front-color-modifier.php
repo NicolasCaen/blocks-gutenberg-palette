@@ -133,36 +133,32 @@ function formulaire_palette_dynamique() {
     ?>
     <form method="post" id="form-palette">
         <h3>Modifier dynamiquement la palette du thème</h3>
-        <div class="palette-mosaique">
-            <?php foreach ($palette as $index => $couleur): ?>
-                <div class="mosaique-couleur" 
-                    style="background-color: <?php echo isset($couleur['color']) ? esc_attr($couleur['color']) : '#000000'; ?>;" 
-                    title="<?php echo isset($couleur['name']) ? esc_attr($couleur['name']) : 'Couleur ' . $index; ?>">
-                </div>
-            <?php endforeach; ?>
-        </div>
-
+        
         <div class="palette-container">
             <?php foreach ($palette as $index => $couleur): ?>
-                <div class="palette-item">
-                    <label>
-                        <?php echo isset($couleur['name']) ? esc_html($couleur['name']) : 'Couleur ' . $index; ?>
-                        <input 
-                            type="color" 
-                            name="palette_<?php echo isset($couleur['slug']) ? esc_attr($couleur['slug']) : 'color-' . $index; ?>" 
-                            value="<?php echo isset($couleur['color']) ? esc_attr($couleur['color']) : '#000000'; ?>" 
-                            data-css-var="--wp--preset--color--<?php echo isset($couleur['slug']) ? esc_attr($couleur['slug']) : 'color-' . $index; ?>"
-                            class="live-color"
-                        >
-                    </label>
-                    <span class="code-var">var(--wp--preset--color--<?php echo isset($couleur['slug']) ? esc_attr($couleur['slug']) : 'color-' . $index; ?>)</span>
+                <div class="color-square-container">
+                    <input 
+                        type="color" 
+                        name="palette_<?php echo isset($couleur['slug']) ? esc_attr($couleur['slug']) : 'color-' . $index; ?>" 
+                        value="<?php echo isset($couleur['color']) ? esc_attr($couleur['color']) : '#000000'; ?>" 
+                        data-css-var="--wp--preset--color--<?php echo isset($couleur['slug']) ? esc_attr($couleur['slug']) : 'color-' . $index; ?>"
+                        class="live-color"
+                        title="<?php echo isset($couleur['name']) ? esc_attr($couleur['name']) : 'Couleur ' . $index; ?> - var(--wp--preset--color--<?php echo isset($couleur['slug']) ? esc_attr($couleur['slug']) : 'color-' . $index; ?>)"
+                    >
                 </div>
             <?php endforeach; ?>
         </div>
 
-        <div style="margin-top: 20px;">
-            <input type="submit" name="enregistrer_palette" value="Enregistrer les couleurs">
-            <input type="submit" name="reinitialiser_palette" value="Réinitialiser la palette">
+        <div class="action-buttons">
+            <input type="submit" name="enregistrer_palette" value="Enregistrer les couleurs" class="button button-primary">
+            <input type="submit" name="reinitialiser_palette" value="Réinitialiser la palette" class="button">
+            <button type="button" id="export-json" class="button">Exporter en JSON</button>
+            <button type="button" id="import-json-btn" class="button">Importer JSON</button>
+        </div>
+        
+        <div id="import-json-container" style="display: none; margin-top: 20px;">
+            <textarea id="import-json-textarea" placeholder="Collez votre JSON de palette ici..." rows="5" style="width: 100%;"></textarea>
+            <button type="button" id="apply-json" class="button button-primary" style="margin-top: 10px;">Appliquer</button>
         </div>
     </form>
 
@@ -176,25 +172,133 @@ function formulaire_palette_dynamique() {
                 <?php endif; ?>
             <?php endforeach; ?>
         }
-        .palette-container { margin-top: 20px; }
-        .palette-item { margin-bottom: 12px; }
-        .palette-item label { display: flex; align-items: center; gap: 12px; }
-        .code-var { font-family: monospace; color: #666; font-size: 12px; }
-        .palette-mosaique { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
-        .mosaique-couleur { width: 30px; height: 30px; border-radius: 4px; border: 1px solid #ddd; cursor: default; }
+        .palette-container { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 10px; 
+            margin: 20px 0; 
+        }
+        .color-square-container { 
+            position: relative; 
+        }
+        .color-square-container input[type="color"] { 
+            width: 50px; 
+            height: 50px; 
+            padding: 0; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+        }
+        .color-square-container input[type="color"]::-webkit-color-swatch-wrapper { 
+            padding: 0; 
+        }
+        .color-square-container input[type="color"]::-webkit-color-swatch { 
+            border: none; 
+            border-radius: 4px; 
+        }
+        .action-buttons { 
+            margin-top: 20px; 
+            display: flex; 
+            gap: 10px; 
+        }
+        #json-output { 
+            display: none; 
+            margin-top: 20px; 
+            padding: 15px; 
+            background-color: #f5f5f5; 
+            border-radius: 4px; 
+            font-family: monospace; 
+            white-space: pre-wrap; 
+            max-height: 200px; 
+            overflow-y: auto; 
+        }
     </style>
+
+    <div id="json-output"></div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const inputs = document.querySelectorAll('.live-color');
+            const exportButton = document.getElementById('export-json');
+            const jsonOutput = document.getElementById('json-output');
+            
+            // Mise à jour des couleurs en temps réel
             inputs.forEach(input => {
                 input.addEventListener('input', function () {
                     const cssVar = this.dataset.cssVar;
                     document.documentElement.style.setProperty(cssVar, this.value);
-                    // Met à jour la mosaïque
-                    const index = Array.from(inputs).indexOf(this);
-                    const tile = document.querySelectorAll('.mosaique-couleur')[index];
-                    if (tile) tile.style.backgroundColor = this.value;
+                });
+            });
+            
+            // Gestion de l'importation JSON
+            const importJsonBtn = document.getElementById('import-json-btn');
+            const importJsonContainer = document.getElementById('import-json-container');
+            const importJsonTextarea = document.getElementById('import-json-textarea');
+            const applyJsonBtn = document.getElementById('apply-json');
+            
+            importJsonBtn.addEventListener('click', function() {
+                importJsonContainer.style.display = importJsonContainer.style.display === 'none' ? 'block' : 'none';
+            });
+            
+            applyJsonBtn.addEventListener('click', function() {
+                try {
+                    const importedData = JSON.parse(importJsonTextarea.value);
+                    
+                    if (!Array.isArray(importedData)) {
+                        throw new Error('Le format JSON n\'est pas valide. Il doit s\'agir d\'un tableau d\'objets.');
+                    }
+                    
+                    // Vérifier si nous avons suffisamment d'inputs pour les données importées
+                    if (importedData.length > inputs.length) {
+                        alert(`Attention : La palette importée contient ${importedData.length} couleurs, mais vous n'avez que ${inputs.length} emplacements disponibles. Seules les ${inputs.length} premières couleurs seront utilisées.`);
+                    }
+                    
+                    // Appliquer les couleurs aux inputs existants
+                    for (let i = 0; i < Math.min(importedData.length, inputs.length); i++) {
+                        const colorData = importedData[i];
+                        const input = inputs[i];
+                        
+                        if (colorData.color) {
+                            input.value = colorData.color;
+                            const cssVar = input.dataset.cssVar;
+                            document.documentElement.style.setProperty(cssVar, colorData.color);
+                        }
+                    }
+                    
+                    alert('Palette importée avec succès ! Cliquez sur "Enregistrer les couleurs" pour appliquer les changements.');
+                    importJsonContainer.style.display = 'none';
+                    
+                } catch (error) {
+                    alert('Erreur lors de l\'importation : ' + error.message);
+                }
+            });
+            
+            // Exportation JSON
+            exportButton.addEventListener('click', function() {
+                const paletteData = [];
+                
+                inputs.forEach(input => {
+                    const name = input.title.split(' - ')[0];
+                    const cssVar = input.dataset.cssVar;
+                    const slug = cssVar.replace('--wp--preset--color--', '');
+                    
+                    paletteData.push({
+                        slug: slug,
+                        name: name,
+                        color: input.value
+                    });
+                });
+                
+                const jsonString = JSON.stringify(paletteData, null, 2);
+                jsonOutput.textContent = jsonString;
+                jsonOutput.style.display = 'block';
+                
+                // Copier dans le presse-papier
+                navigator.clipboard.writeText(jsonString).then(() => {
+                    alert('Palette JSON copiée dans le presse-papier !');
+                }).catch(err => {
+                    console.error('Erreur lors de la copie : ', err);
                 });
             });
         });
