@@ -316,6 +316,7 @@ function formulaire_palette_dynamique() {
                     <span class="dashicons dashicons-admin-appearance"></span>
                 </button>
             </div>
+            <div class="palette-content">
             
             <div class="palette-container">
                 <?php foreach ($palette as $index => $couleur): ?>
@@ -345,6 +346,7 @@ function formulaire_palette_dynamique() {
                 <button type="button" id="import-json-btn" class="icon-button" title="Importer JSON">
                     <span class="dashicons dashicons-upload"></span>
                 </button>
+            </div>
             </div>
         </div>
         
@@ -402,6 +404,12 @@ function formulaire_palette_dynamique() {
             }
         }
         
+        /* Contenu de la palette */
+        .palette-content {
+            width: 100%;
+            transition: all 0.3s ease;
+        }
+        
         /* État réduit */
         .palette-control-panel.collapsed {
             width: 50px;
@@ -415,10 +423,8 @@ function formulaire_palette_dynamique() {
             opacity: 0.9;
         }
         
-        .palette-control-panel.collapsed .palette-container,
-        .palette-control-panel.collapsed .action-buttons {
-            opacity: 0;
-            visibility: hidden;
+        .palette-control-panel.collapsed .palette-content {
+            display: none;
         }
         
         /* Bouton toggle */
@@ -427,6 +433,18 @@ function formulaire_palette_dynamique() {
             top: -15px;
             right: -15px;
             z-index: 10000;
+        }
+        
+        /* Repositionnement du bouton toggle quand le panneau est refermé */
+        .palette-control-panel.collapsed {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .palette-control-panel.collapsed .palette-toggle {
+            position: static;
+            margin: 0;
         }
         
         .toggle-button {
