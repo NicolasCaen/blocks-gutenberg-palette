@@ -50,54 +50,215 @@ function formulaire_palette_dynamique() {
             ];
         }
 
-        $new_data = [
-            'version' => 2,
+        // Enregistrer dans le post wp_global_styles
+        if (class_exists('WP_Theme_JSON_Resolver')) {
+            // Récupérer le post global-styles ou le créer s'il n'existe pas
+            $global_styles_post = null;
+            
+            // Rechercher le post global-styles
+            $query = new WP_Query([
+                'post_type'      => 'wp_global_styles',
+                'posts_per_page' => 1,
+                'no_found_rows'  => true,
+            ]);
+            
+            if ($query->have_posts()) {
+                $query->the_post();
+                $global_styles_post_id = get_the_ID();
+                $global_styles_post = get_post($global_styles_post_id);
+                wp_reset_postdata();
+            }
+            
+            if ($global_styles_post) {
+                // Le post existe, mettre à jour son contenu
+                $content = json_decode($global_styles_post->post_content, true);
+                if (is_array($content)) {
+                    if (!isset($content['settings'])) {
+                        $content['settings'] = [];
+                    }
+                    if (!isset($content['settings']['color'])) {
+                        $content['settings']['color'] = [];
+                    }
+                    $content['settings']['color']['palette'] = ['theme' => $nouvelles_couleurs];
+                    
+                    wp_update_post([
+                        'ID'           => $global_styles_post->ID,
+                        'post_content' => wp_json_encode($content),
+                    ]);
+                }
+            } else {
+                // Créer un nouveau post global-styles
+                $content = [
+                    'version' => 2,
+                    'settings' => [
+                        'color' => [
+                            'palette' => [
+                                'theme' => $nouvelles_couleurs
+                            ]
+                        ]
+                    ]
+                ];
+                
+                wp_insert_post([
+                    'post_type'    => 'wp_global_styles',
+                    'post_status'  => 'publish',
+                    'post_content' => wp_json_encode($content),
+                ]);
+            }
+            
+            // Vider le cache
+            delete_transient('global_styles');
+            delete_transient('global_styles_' . get_stylesheet());
+        } else {
+            // Fallback : enregistrer dans les options
+            update_option('theme_palette_custom', $nouvelles_couleurs);
+        }
+
+        // Rediriger pour éviter la soumission multiple du formulaire
+        wp_redirect(add_query_arg('palette_updated', '1', $_SERVER['REQUEST_URI']));
+        exit;
+    }
+    
+    // Traitement du formulaire : création d'une nouvelle palette
+    if (isset($_POST['creer_nouvelle_palette'])) {
+        // Récupérer les couleurs du formulaire
+        $nouvelles_couleurs = [];
+
+        foreach ($palette as $index => $couleur) {
+            // Déterminer le slug à utiliser
+            $slug = isset($couleur['slug']) ? $couleur['slug'] : 'color-' . $index;
+            
+            // Déterminer la valeur de couleur à utiliser
+            $nouvelle_valeur = sanitize_hex_color($_POST['palette_' . $slug] ?? ($couleur['color'] ?? '#000000'));
+            
+            // Construire l'entrée de couleur
+            $nouvelles_couleurs[] = [
+                'slug'  => $slug,
+                'name'  => $couleur['name'] ?? ('Couleur ' . $index),
+                'color' => $nouvelle_valeur
+            ];
+        }
+        
+        // Créer un nouveau fichier de palette dans le répertoire styles/colors
+        $styles_dir = get_template_directory() . '/styles/colors/';
+        
+        // Vérifier si le répertoire existe
+        if (!file_exists($styles_dir)) {
+            wp_mkdir_p($styles_dir);
+        }
+        
+        // Générer un nom pour la nouvelle palette
+        $date = new DateTime();
+        $palette_name = 'custom-palette-' . $date->format('YmdHis');
+        $palette_title = 'Custom Palette ' . $date->format('Y-m-d H:i:s');
+        
+        // Déterminer le numéro du fichier
+        $existing_files = glob($styles_dir . '*.json');
+        $next_number = count($existing_files) + 1;
+        $file_name = sprintf('%02d', $next_number) . '-' . $palette_name . '.json';
+        
+        // Créer le contenu du fichier JSON
+        $palette_data = [
+            '$schema' => 'https://schemas.wp.org/trunk/theme.json',
+            'version' => 3,
+            'title' => $palette_title,
             'settings' => [
                 'color' => [
                     'palette' => $nouvelles_couleurs
                 ]
             ]
         ];
-
-        // Use WP_Query to find the global styles post instead of wp_get_global_styles_post()
-        if (post_type_exists('wp_global_styles')) {
-            $global_styles_query = new WP_Query(
+        
+        // Ajouter la section duotone si les deux premières couleurs existent
+        if (count($nouvelles_couleurs) >= 2) {
+            $palette_data['settings']['color']['duotone'] = [
                 [
-                    'post_type' => 'wp_global_styles',
-                    'post_status' => 'publish',
-                    'posts_per_page' => 1,
-                    'no_found_rows' => true,
-                    'fields' => 'ids',
+                    'colors' => [
+                        $nouvelles_couleurs[0]['color'],
+                        $nouvelles_couleurs[1]['color']
+                    ],
+                    'name' => $palette_title . ' filter',
+                    'slug' => sanitize_title($palette_name) . '-filter'
                 ]
-            );
-            
-            $global_styles_post_id = $global_styles_query->posts ? $global_styles_query->posts[0] : 0;
-            
-            if ($global_styles_post_id) {
-                wp_update_post([
-                    'ID' => $global_styles_post_id,
-                    'post_content' => wp_json_encode($new_data),
-                ]);
-            } else {
-                wp_insert_post([
-                    'post_title'   => 'Custom Styles',
-                    'post_name'    => 'wp-global-styles',
-                    'post_type'    => 'wp_global_styles',
-                    'post_status'  => 'publish',
-                    'post_content' => wp_json_encode($new_data),
-                    'post_author'  => get_current_user_id(),
-                    'meta_input'   => [
-                        'is_user_theme' => true,
-                    ]
-                ]);
-            }
-        } else {
-            // Fallback method: store in options table
-            update_option('custom_theme_palette', $nouvelles_couleurs);
+            ];
         }
-
-        echo '<p>Palette mise à jour avec succès.</p>';
-        echo '<script>location.reload();</script>';
+        
+        // Écrire le fichier
+        $file_path = $styles_dir . $file_name;
+        $json_content = wp_json_encode($palette_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        
+        if (file_put_contents($file_path, $json_content)) {
+            // Enregistrer également dans le post wp_global_styles pour appliquer immédiatement
+            if (class_exists('WP_Theme_JSON_Resolver')) {
+                // Récupérer le post global-styles ou le créer s'il n'existe pas
+                $global_styles_post = null;
+                
+                // Rechercher le post global-styles
+                $query = new WP_Query([
+                    'post_type'      => 'wp_global_styles',
+                    'posts_per_page' => 1,
+                    'no_found_rows'  => true,
+                ]);
+                
+                if ($query->have_posts()) {
+                    $query->the_post();
+                    $global_styles_post_id = get_the_ID();
+                    $global_styles_post = get_post($global_styles_post_id);
+                    wp_reset_postdata();
+                }
+                
+                if ($global_styles_post) {
+                    // Le post existe, mettre à jour son contenu
+                    $content = json_decode($global_styles_post->post_content, true);
+                    if (is_array($content)) {
+                        if (!isset($content['settings'])) {
+                            $content['settings'] = [];
+                        }
+                        if (!isset($content['settings']['color'])) {
+                            $content['settings']['color'] = [];
+                        }
+                        $content['settings']['color']['palette'] = ['theme' => $nouvelles_couleurs];
+                        
+                        wp_update_post([
+                            'ID'           => $global_styles_post->ID,
+                            'post_content' => wp_json_encode($content),
+                        ]);
+                    }
+                } else {
+                    // Créer un nouveau post global-styles
+                    $content = [
+                        'version' => 2,
+                        'settings' => [
+                            'color' => [
+                                'palette' => [
+                                    'theme' => $nouvelles_couleurs
+                                ]
+                            ]
+                        ]
+                    ];
+                    
+                    wp_insert_post([
+                        'post_type'    => 'wp_global_styles',
+                        'post_status'  => 'publish',
+                        'post_content' => wp_json_encode($content),
+                    ]);
+                }
+                
+                // Vider le cache
+                delete_transient('global_styles');
+                delete_transient('global_styles_' . get_stylesheet());
+            } else {
+                // Fallback : enregistrer dans les options
+                update_option('theme_palette_custom', $nouvelles_couleurs);
+            }
+            
+            // Rediriger pour éviter la soumission multiple du formulaire
+            wp_redirect(add_query_arg('palette_created', '1', $_SERVER['REQUEST_URI']));
+        } else {
+            // En cas d'erreur d'écriture du fichier
+            wp_redirect(add_query_arg('palette_error', '1', $_SERVER['REQUEST_URI']));
+        }
+        exit;
     }
 
     // Réinitialisation de la palette
@@ -124,12 +285,24 @@ function formulaire_palette_dynamique() {
             delete_option('custom_theme_palette');
         }
         
-        echo '<p>Palette réinitialisée.</p>';
-        echo '<script>location.reload();</script>';
+        // Rediriger pour éviter la soumission multiple du formulaire
+        wp_redirect(add_query_arg('palette_reset', '1', $_SERVER['REQUEST_URI']));
+        exit;
     }
 
     // Affichage du formulaire
     ob_start();
+    
+    // Afficher les messages de confirmation
+    if (isset($_GET['palette_updated'])) {
+        echo '<div class="notice notice-success"><p>Palette de couleurs mise à jour avec succès.</p></div>';
+    } elseif (isset($_GET['palette_reset'])) {
+        echo '<div class="notice notice-success"><p>Palette de couleurs réinitialisée avec succès.</p></div>';
+    } elseif (isset($_GET['palette_created'])) {
+        echo '<div class="notice notice-success"><p>Nouvelle palette de couleurs créée avec succès et enregistrée dans le dossier des styles.</p></div>';
+    } elseif (isset($_GET['palette_error'])) {
+        echo '<div class="notice notice-error"><p>Erreur lors de la création du fichier de palette. Vérifiez les permissions d\'écriture.</p></div>';
+    }
     ?>
     <form method="post" id="form-palette">
         <h3>Modifier dynamiquement la palette du thème</h3>
@@ -150,8 +323,8 @@ function formulaire_palette_dynamique() {
         </div>
 
         <div class="action-buttons">
-            <input type="submit" name="enregistrer_palette" value="Enregistrer les couleurs" class="button button-primary">
             <input type="submit" name="reinitialiser_palette" value="Réinitialiser la palette" class="button">
+            <input type="submit" name="creer_nouvelle_palette" value="Créer nouvelle palette" class="button button-secondary">
             <button type="button" id="export-json" class="button">Exporter en JSON</button>
             <button type="button" id="import-json-btn" class="button">Importer JSON</button>
         </div>
