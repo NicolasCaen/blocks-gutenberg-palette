@@ -6,6 +6,9 @@ function formulaire_palette_dynamique() {
     if (!class_exists('WP_Theme_JSON_Resolver')) {
         return '<p>Cette fonctionnalité nécessite WordPress 5.9 ou supérieur.</p>';
     }
+    
+    // Charger les Dashicons pour les icônes
+    wp_enqueue_style('dashicons');
 
     // Récupérer les données complètes
     $user_settings = WP_Theme_JSON_Resolver::get_user_data()->get_settings();
@@ -307,26 +310,42 @@ function formulaire_palette_dynamique() {
     <form method="post" id="form-palette">
         <h3>Modifier dynamiquement la palette du thème</h3>
         
-        <div class="palette-container">
-            <?php foreach ($palette as $index => $couleur): ?>
-                <div class="color-square-container">
-                    <input 
-                        type="color" 
-                        name="palette_<?php echo isset($couleur['slug']) ? esc_attr($couleur['slug']) : 'color-' . $index; ?>" 
-                        value="<?php echo isset($couleur['color']) ? esc_attr($couleur['color']) : '#000000'; ?>" 
-                        data-css-var="--wp--preset--color--<?php echo isset($couleur['slug']) ? esc_attr($couleur['slug']) : 'color-' . $index; ?>"
-                        class="live-color"
-                        title="<?php echo isset($couleur['name']) ? esc_attr($couleur['name']) : 'Couleur ' . $index; ?> - var(--wp--preset--color--<?php echo isset($couleur['slug']) ? esc_attr($couleur['slug']) : 'color-' . $index; ?>)"
-                    >
-                </div>
-            <?php endforeach; ?>
-        </div>
+        <div id="palette-control-panel" class="palette-control-panel expanded">
+            <div class="palette-toggle">
+                <button type="button" id="toggle-palette" class="toggle-button">
+                    <span class="dashicons dashicons-admin-appearance"></span>
+                </button>
+            </div>
+            
+            <div class="palette-container">
+                <?php foreach ($palette as $index => $couleur): ?>
+                    <div class="color-square-container">
+                        <input 
+                            type="color" 
+                            name="palette_<?php echo isset($couleur['slug']) ? esc_attr($couleur['slug']) : 'color-' . $index; ?>" 
+                            value="<?php echo isset($couleur['color']) ? esc_attr($couleur['color']) : '#000000'; ?>" 
+                            data-css-var="--wp--preset--color--<?php echo isset($couleur['slug']) ? esc_attr($couleur['slug']) : 'color-' . $index; ?>"
+                            class="live-color"
+                            title="<?php echo isset($couleur['name']) ? esc_attr($couleur['name']) : 'Couleur ' . $index; ?> - var(--wp--preset--color--<?php echo isset($couleur['slug']) ? esc_attr($couleur['slug']) : 'color-' . $index; ?>)"
+                        >
+                    </div>
+                <?php endforeach; ?>
+            </div>
 
-        <div class="action-buttons">
-            <input type="submit" name="reinitialiser_palette" value="Réinitialiser la palette" class="button">
-            <input type="submit" name="creer_nouvelle_palette" value="Créer nouvelle palette" class="button button-secondary">
-            <button type="button" id="export-json" class="button">Exporter en JSON</button>
-            <button type="button" id="import-json-btn" class="button">Importer JSON</button>
+            <div class="action-buttons">
+                <button type="submit" name="reinitialiser_palette" class="icon-button" title="Réinitialiser la palette">
+                    <span class="dashicons dashicons-image-rotate"></span>
+                </button>
+                <button type="submit" name="creer_nouvelle_palette" class="icon-button" title="Créer nouvelle palette">
+                    <span class="dashicons dashicons-welcome-add-page"></span>
+                </button>
+                <button type="button" id="export-json" class="icon-button" title="Exporter en JSON">
+                    <span class="dashicons dashicons-download"></span>
+                </button>
+                <button type="button" id="import-json-btn" class="icon-button" title="Importer JSON">
+                    <span class="dashicons dashicons-upload"></span>
+                </button>
+            </div>
         </div>
         
         <div id="import-json-container" style="display: none; margin-top: 20px;">
@@ -345,35 +364,156 @@ function formulaire_palette_dynamique() {
                 <?php endif; ?>
             <?php endforeach; ?>
         }
+        /* Panel principal */
+        .palette-control-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 9999;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            padding: 10px;
+            transition: all 0.3s ease;
+            max-width: 90vw;
+            opacity: 0.95;
+        }
+        
+        .palette-control-panel:hover {
+            opacity: 1;
+        }
+        
+        /* Adaptation mobile */
+        @media (max-width: 768px) {
+            .palette-control-panel {
+                bottom: 10px;
+                left: 10px;
+                padding: 8px;
+            }
+            
+            .color-square-container input[type="color"] {
+                width: 35px;
+                height: 35px;
+            }
+            
+            .icon-button {
+                width: 32px;
+                height: 32px;
+            }
+        }
+        
+        /* État réduit */
+        .palette-control-panel.collapsed {
+            width: 50px;
+            height: 50px;
+            overflow: hidden;
+            opacity: 0.7;
+            transform: scale(0.9);
+        }
+        
+        .palette-control-panel.collapsed:hover {
+            opacity: 0.9;
+        }
+        
+        .palette-control-panel.collapsed .palette-container,
+        .palette-control-panel.collapsed .action-buttons {
+            opacity: 0;
+            visibility: hidden;
+        }
+        
+        /* Bouton toggle */
+        .palette-toggle {
+            position: absolute;
+            top: -15px;
+            right: -15px;
+            z-index: 10000;
+        }
+        
+        .toggle-button {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background-color: #2271b1;
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        
+        .toggle-button:hover {
+            background-color: #135e96;
+        }
+        
+        /* Conteneur de palette */
         .palette-container { 
             display: flex; 
             flex-wrap: wrap; 
             gap: 10px; 
-            margin: 20px 0; 
+            margin: 10px 0;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
         }
+        
+        /* Conteneurs de couleurs */
         .color-square-container { 
             position: relative; 
         }
+        
         .color-square-container input[type="color"] { 
-            width: 50px; 
-            height: 50px; 
+            width: 40px; 
+            height: 40px; 
             padding: 0; 
             border: none; 
             border-radius: 4px; 
             cursor: pointer; 
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
+        
+        .color-square-container input[type="color"]:hover { 
+            transform: scale(1.1);
+            box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+        }
+        
         .color-square-container input[type="color"]::-webkit-color-swatch-wrapper { 
             padding: 0; 
         }
+        
         .color-square-container input[type="color"]::-webkit-color-swatch { 
             border: none; 
             border-radius: 4px; 
         }
+        
+        /* Boutons d'action */
         .action-buttons { 
-            margin-top: 20px; 
+            margin-top: 10px; 
             display: flex; 
-            gap: 10px; 
+            gap: 8px;
+            justify-content: center;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        
+        .icon-button {
+            width: 36px;
+            height: 36px;
+            border-radius: 4px;
+            background-color: #f0f0f1;
+            border: 1px solid #c3c4c7;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            color: #3c434a;
+            transition: all 0.2s ease;
+        }
+        
+        .icon-button:hover {
+            background-color: #e0e0e1;
+            color: #135e96;
         }
         #json-output { 
             display: none; 
@@ -395,6 +535,34 @@ function formulaire_palette_dynamique() {
             const inputs = document.querySelectorAll('.live-color');
             const exportButton = document.getElementById('export-json');
             const jsonOutput = document.getElementById('json-output');
+            const toggleButton = document.getElementById('toggle-palette');
+            const palettePanel = document.getElementById('palette-control-panel');
+            
+            // Gestion du toggle pour afficher/cacher la palette
+            toggleButton.addEventListener('click', function() {
+                palettePanel.classList.toggle('collapsed');
+                // Sauvegarder l'état dans localStorage
+                localStorage.setItem('palette_panel_collapsed', palettePanel.classList.contains('collapsed'));
+                
+                // Mettre à jour l'icône du bouton
+                const iconElement = this.querySelector('.dashicons');
+                if (palettePanel.classList.contains('collapsed')) {
+                    iconElement.classList.remove('dashicons-admin-appearance');
+                    iconElement.classList.add('dashicons-visibility');
+                } else {
+                    iconElement.classList.remove('dashicons-visibility');
+                    iconElement.classList.add('dashicons-admin-appearance');
+                }
+            });
+            
+            // Restaurer l'état précédent au chargement
+            if (localStorage.getItem('palette_panel_collapsed') === 'true') {
+                palettePanel.classList.add('collapsed');
+                // Mettre à jour l'icône du bouton
+                const iconElement = toggleButton.querySelector('.dashicons');
+                iconElement.classList.remove('dashicons-admin-appearance');
+                iconElement.classList.add('dashicons-visibility');
+            }
             
             // Mise à jour des couleurs en temps réel
             inputs.forEach(input => {
